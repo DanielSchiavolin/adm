@@ -7,7 +7,7 @@
 // ============================================================
 
 // Bump together with version.json on every deploy: open apps reload themselves when it changes
-const APP_VERSION = '2026-10-26.2';
+const APP_VERSION = '2026-10-26.3';
 
 const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyB2XpLy5atMeLtc-XuOaAtY9m72mK9dZSY',
@@ -111,7 +111,8 @@ function normalizeConfig(c) {
   };
 }
 // situação do pagamento: launches saved before this field count as "pago"
-function sitOf(g) { return g.situacao === 'reembolsado' ? 'reembolsado' : 'pago'; }
+function sitOf(g) { return g.situacao === 'reembolsado' || g.situacao === 'nao_pago' ? g.situacao : 'pago'; }
+const SIT_LABEL = { pago: 'Pago', nao_pago: 'Não pago', reembolsado: 'Reembolsado' };
 function sumCents(list) { return list.reduce((s, g) => s + cents(g.valor), 0); }
 function readJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
@@ -367,6 +368,11 @@ class AdmApp {
     const pct = totalPrev ? Math.round((diff / totalPrev) * 100) : null;
     document.getElementById('month-total').textContent = brl(total / 100);
     document.getElementById('gasto-count').textContent = list.length || '';
+    // não pagos (de todos os meses) fazem a aba Lançamentos piscar
+    const naoPagos = this.gastosCache.filter(g => sitOf(g) === 'nao_pago').length;
+    const tab = document.querySelector('.view-tab[data-view="lancamentos"]');
+    tab.classList.toggle('blink-alert', naoPagos > 0);
+    tab.title = naoPagos ? `${naoPagos} gasto(s) não pago(s)` : '';
 
     const perdasAll = this.gastosCache.filter(g => g.categoria === 'perdas');
     const pend = perdasAll.filter(g => g.perdaStatus !== 'ressarcido');
@@ -490,7 +496,7 @@ class AdmApp {
             ${g.responsavel ? `<span>👤 ${esc(g.responsavel)}</span>` : ''}
             ${sitOf(g) === 'reembolsado'
               ? `<span class="status-badge reembolsado">💸 Reembolsado${g.reembolsoQra ? ` → ${esc(g.reembolsoQra)}` : ''}</span>`
-              : '<span class="status-badge pago">✅ Pago</span>'}
+              : sitOf(g) === 'nao_pago' ? '<span class="status-badge nao-pago blink-alert">❌ Não pago</span>' : '<span class="status-badge pago">✅ Pago</span>'}
             ${g.obs ? `<span>💬 ${esc(g.obs)}</span>` : ''}
             ${this.store.isPending(g.id) ? '<span>⏳ aguardando internet</span>' : ''}
           </div>
@@ -610,7 +616,7 @@ class AdmApp {
       descricao: v('g-descricao'),
       responsavel: v('g-responsavel'),
       obs: v('g-obs'),
-      situacao: reemb ? 'reembolsado' : 'pago',
+      situacao: this.formSit,
       reembolsoQra: reemb ? v('g-reemb-qra') : null,
       funcionario: cat === 'dobra' ? v('g-funcionario') : null,
       dataDobra: cat === 'dobra' ? v('g-data-dobra') || data : null,
@@ -711,7 +717,7 @@ class AdmApp {
       <div class="rel-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Responsável</th><th>Situação</th><th class="num">Valor</th></tr>
         ${rows.map(g => `<tr><td>${fmtDate(g.data)}</td><td>${esc(this.cat(g.categoria).nome)}${g.subtipo ? ` · ${esc(g.subtipo)}` : ''}</td>
           <td>${esc(g.descricao)}${g.funcionario ? ` (${esc(g.funcionario)}${g.dataDobra ? ', dobra ' + fmtDate(g.dataDobra) : ''})` : ''}${g.obs ? ` — ${esc(g.obs)}` : ''}${g.temAnexo ? ' 📎' : ''}</td>
-          <td>${esc(g.responsavel)}</td><td>${sitOf(g) === 'reembolsado' ? `Reembolsado${g.reembolsoQra ? ' → ' + esc(g.reembolsoQra) : ''}` : 'Pago'}</td><td class="num">${brl(parseMoney(g.valor))}</td></tr>`).join('')}</table></div>`;
+          <td>${esc(g.responsavel)}</td><td>${SIT_LABEL[sitOf(g)]}${g.reembolsoQra ? ' → ' + esc(g.reembolsoQra) : ''}</td><td class="num">${brl(parseMoney(g.valor))}</td></tr>`).join('')}</table></div>`;
       }).join('');
     }
     html += '<div class="rel-sign"><div>Responsável ADM</div><div>Diretoria</div></div>';
@@ -773,7 +779,7 @@ class AdmApp {
     const q = s => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
     const num = n => (parseMoney(n) || 0).toFixed(2).replace('.', ',');
     const head = ['Data', 'QTH', 'Categoria', 'Subtipo', 'Descrição', 'Valor (R$)', 'Responsável', 'Situação', 'QRA reembolsado', 'Funcionário (3/6)', 'Data da dobra', 'Status perda', 'Valor ressarcido', 'Data ressarcimento', 'Observação', 'Comprovante'];
-    const rows = list.map(g => [fmtDate(g.data), this.qthName(g.qth), this.cat(g.categoria).nome, g.subtipo, g.descricao, num(g.valor), g.responsavel, sitOf(g) === 'reembolsado' ? 'Reembolsado' : 'Pago', g.reembolsoQra, g.funcionario, fmtDate(g.dataDobra),
+    const rows = list.map(g => [fmtDate(g.data), this.qthName(g.qth), this.cat(g.categoria).nome, g.subtipo, g.descricao, num(g.valor), g.responsavel, SIT_LABEL[sitOf(g)], g.reembolsoQra, g.funcionario, fmtDate(g.dataDobra),
       g.categoria === 'perdas' ? (g.perdaStatus === 'ressarcido' ? 'Ressarcido' : 'Pendente') : '', g.categoria === 'perdas' ? num(g.valorRessarcido) : '', fmtDate(g.dataRessarcimento), g.obs, g.temAnexo ? 'Sim' : 'Não']);
     rows.push(['', '', '', '', 'TOTAL', num(sumCents(list) / 100)]);
     const csv = '﻿' + [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');

@@ -157,3 +157,12 @@
 /* situação do pagamento */
 .status-badge.pago { background: rgba(46, 204, 113, 0.2); color: #58D68D; }
 .status-badge.reembolsado { background: rgba(52, 152, 219, 0.22); color: #7FC4F5; }
+.status-badge.nao-pago { color: #FFF; }
+
+/* alerta piscando vermelho/azul: gastos não pagos */
+@keyframes blink-red-blue {
+  0%, 100% { background: #E74C3C; color: #FFF; border-color: #E74C3C; }
+  50% { background: #2E86DE; color: #FFF; border-color: #2E86DE; }
+}
+.blink-alert { animation: blink-red-blue 1s steps(1, end) infinite; }
+@media (prefers-reduced-motion: reduce) { .blink-alert { animation-duration: 2s; } }
