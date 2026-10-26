@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Front Security - ADM Controle de Gastos</title>
+    <meta name="description" content="Controle de gastos administrativos por posto (QTH) da Front Security.">
+    <meta name="theme-color" content="#1B2A4A">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="adm.css">
+</head>
+<body>
+
+    <header id="app-header">
+        <div class="header-brand">
+            <svg class="header-logo" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="25" r="18" stroke="#F5A623" stroke-width="4" fill="none"/>
+                <circle cx="20" cy="25" r="10" fill="#1B2A4A" stroke="#1B2A4A" stroke-width="3"/>
+                <circle cx="20" cy="25" r="3" fill="#FFFFFF"/>
+                <circle cx="32" cy="10" r="4" fill="#F5A623"/>
+                <path d="M35 15 L35 40 L45 40" stroke="#1B2A4A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M35 15 L35 28 L44 28" stroke="#1B2A4A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M8 8 A20 20 0 0 1 32 8" stroke="#1B2A4A" stroke-width="4" stroke-linecap="round" fill="none"/>
+            </svg>
+            <div class="header-text">
+                <h1 class="header-title">FRONT SECURITY</h1>
+                <span class="header-subtitle">ADM · Gastos</span>
+            </div>
+        </div>
+        <div class="header-info">
+            <div class="header-connection">
+                <span id="connection-status" class="conn-dot disconnected"></span>
+                <span id="connection-text" class="conn-text">Offline</span>
+            </div>
+            <span id="pending-sync" class="pending-badge" style="display:none" title="Lançamentos esperando internet">⏳ 0</span>
+            <span id="month-total" class="pending-badge all-clear">R$ 0,00</span>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="month-bar no-print">
+            <button class="month-nav" id="month-prev" aria-label="Mês anterior">‹</button>
+            <div class="month-label" id="month-label">--</div>
+            <button class="month-nav" id="month-next" aria-label="Próximo mês">›</button>
+            <button class="month-quick" id="month-current">Mês atual</button>
+        </div>
+
+        <nav class="view-tabs no-print" role="tablist">
+            <button class="view-tab active" data-view="dashboard" role="tab">📊 Dashboard</button>
+            <button class="view-tab" data-view="lancamentos" role="tab">🧾 Lançamentos <span id="gasto-count" class="tab-count"></span></button>
+            <button class="view-tab" data-view="relatorio" role="tab">🖨️ Relatório</button>
+            <button class="view-tab" data-view="config" role="tab">⚙️ Config.</button>
+        </nav>
+
+        <!-- ===== DASHBOARD ===== -->
+        <section id="view-dashboard" class="view active">
+            <div id="dash-summary" class="pay-summary"></div>
+            <div id="dash-perdas"></div>
+            <div class="adm-grid">
+                <div class="adm-card">
+                    <h3 class="pay-section">Por categoria</h3>
+                    <div class="chart-box"><canvas id="chart-categorias"></canvas></div>
+                    <div id="dash-categorias" class="pay-lines"></div>
+                </div>
+                <div class="adm-card">
+                    <h3 class="pay-section">Por QTH</h3>
+                    <div class="chart-box"><canvas id="chart-qths"></canvas></div>
+                    <div id="dash-qths" class="pay-lines"></div>
+                </div>
+            </div>
+            <div class="adm-card">
+                <h3 class="pay-section">Últimos 6 meses</h3>
+                <div class="chart-box chart-wide"><canvas id="chart-meses"></canvas></div>
+            </div>
+        </section>
+
+        <!-- ===== LANÇAMENTOS ===== -->
+        <section id="view-lancamentos" class="view">
+            <div class="toolbar">
+                <input type="search" id="f-busca" class="form-input" placeholder="🔎 Buscar descrição, responsável, funcionário...">
+            </div>
+            <div class="filter-row">
+                <select id="f-periodo" class="form-select">
+                    <option value="mes">📅 Mês selecionado</option>
+                    <option value="custom">📆 Período personalizado</option>
+                    <option value="tudo">♾️ Tudo</option>
+                </select>
+                <input type="date" id="f-de" class="form-input" style="display:none" aria-label="De">
+                <input type="date" id="f-ate" class="form-input" style="display:none" aria-label="Até">
+                <select id="f-qth" class="form-select"></select>
+                <select id="f-cat" class="form-select"></select>
+            </div>
+            <div id="list-summary" class="list-summary"></div>
+            <div id="gastos-list">
+                <div class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <p>Conectando ao servidor...</p>
+                </div>
+            </div>
+            <div class="toolbar export-bar">
+                <button id="export-csv" class="btn-mini">📊 Exportar Excel (CSV)</button>
+            </div>
+        </section>
+
+        <!-- ===== RELATÓRIO ===== -->
+        <section id="view-relatorio" class="view">
+            <div class="toolbar no-print">
+                <button id="print-btn" class="btn-primary btn-inline">🖨️ Imprimir / Salvar PDF</button>
+                <label class="check-line"><input type="checkbox" id="rel-detalhe" checked> Listar cada lançamento</label>
+            </div>
+            <div id="relatorio" class="relatorio"></div>
+        </section>
+
+        <!-- ===== CONFIGURAÇÕES ===== -->
+        <section id="view-config" class="view">
+            <div class="adm-grid">
+                <div class="adm-card">
+                    <h3 class="pay-section">🏢 Postos (QTH)</h3>
+                    <div class="form-help">Um por linha. Renomear não altera lançamentos antigos.</div>
+                    <textarea id="cfg-postos" class="form-input" rows="7"></textarea>
+                </div>
+                <div class="adm-card">
+                    <h3 class="pay-section">👥 Funcionários</h3>
+                    <div class="form-help">Um por linha. Usados no 3/6 e como responsável.</div>
+                    <textarea id="cfg-funcionarios" class="form-input" rows="7"></textarea>
+                </div>
+            </div>
+            <div class="adm-card">
+                <h3 class="pay-section">🏷️ Categorias</h3>
+                <div class="form-help">Nome e subtipos (separados por vírgula). As 8 categorias padrão não podem ser excluídas, só renomeadas.</div>
+                <div id="cfg-categorias"></div>
+                <button id="cfg-add-cat" class="btn-mini">＋ Nova categoria</button>
+            </div>
+            <button id="cfg-save" class="btn-primary">✅ Salvar configurações</button>
+
+            <div class="adm-card backup-card">
+                <h3 class="pay-section">💾 Backup</h3>
+                <div class="export-buttons">
+                    <button id="export-json" class="btn-mini">⬇️ Exportar backup (JSON)</button>
+                    <button id="import-json" class="btn-mini">⬆️ Importar backup (JSON)</button>
+                    <input type="file" id="import-file" accept="application/json,.json" hidden>
+                </div>
+                <div class="export-buttons">
+                    <button id="logout-btn" class="btn-mini">🔒 Sair deste aparelho</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="fab-container no-print">
+        <button id="add-gasto-btn" class="fab fab-add" data-tooltip="Novo gasto" aria-label="Novo gasto">➕</button>
+    </div>
+
+    <!-- ===== NOVO / EDITAR GASTO ===== -->
+    <div id="gasto-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close" data-close="gasto-modal" aria-label="Fechar">✕</button>
+            <h2 id="gasto-modal-title" class="modal-title">➕ Novo gasto</h2>
+            <input type="hidden" id="g-id">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="g-data">Data</label>
+                    <input type="date" id="g-data" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="g-valor">Valor (R$)</label>
+                    <input type="text" id="g-valor" class="form-input money" inputmode="decimal" placeholder="0,00">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoria</label>
+                <div id="g-cat-chips" class="chips"></div>
+            </div>
+            <div class="form-group" id="g-subtipo-group">
+                <label class="form-label" for="g-subtipo">Subtipo</label>
+                <select id="g-subtipo" class="form-select"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="g-qth">Posto (QTH)</label>
+                <select id="g-qth" class="form-select"></select>
+            </div>
+
+            <!-- 3/6: dobra de funcionário -->
+            <div class="dobra-box" id="g-dobra-box">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="g-funcionario">Funcionário que dobrou</label>
+                        <input type="text" id="g-funcionario" class="form-input" list="func-names" autocomplete="off" placeholder="Nome">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="g-data-dobra">Data da dobra</label>
+                        <input type="date" id="g-data-dobra" class="form-input">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Perdas: furtos ressarcidos -->
+            <div class="perda-box" id="g-perda-box">
+                <div class="form-group">
+                    <label class="form-label" for="g-perda-status">Status</label>
+                    <select id="g-perda-status" class="form-select">
+                        <option value="pendente">⏳ Pendente</option>
+                        <option value="ressarcido">✅ Ressarcido</option>
+                    </select>
+                </div>
+                <div class="form-row" id="g-ressarc-row">
+                    <div class="form-group">
+                        <label class="form-label" for="g-valor-ressarc">Valor ressarcido (R$)</label>
+                        <input type="text" id="g-valor-ressarc" class="form-input money" inputmode="decimal" placeholder="0,00">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="g-data-ressarc">Data do ressarcimento</label>
+                        <input type="date" id="g-data-ressarc" class="form-input">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="g-descricao">Descrição</label>
+                <input type="text" id="g-descricao" class="form-input" placeholder="Ex: 2 cadeados 50mm">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="g-responsavel">Responsável</label>
+                <input type="text" id="g-responsavel" class="form-input" list="func-names" autocomplete="off" placeholder="Quem pagou / comprou">
+                <datalist id="func-names"></datalist>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="g-obs">Observação</label>
+                <input type="text" id="g-obs" class="form-input" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Comprovante (foto)</label>
+                <div class="anexo-row">
+                    <label class="btn-mini anexo-btn">📷 Foto / arquivo<input type="file" id="g-anexo" accept="image/*" hidden></label>
+                    <div id="g-anexo-preview" class="anexo-preview"></div>
+                </div>
+            </div>
+            <div class="entry-actions">
+                <button id="g-delete" class="btn-danger btn-inline">🗑️ Excluir</button>
+                <button id="g-save" class="btn-primary btn-inline">✅ Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== VER COMPROVANTE ===== -->
+    <div id="anexo-modal" class="modal-overlay">
+        <div class="modal-content modal-wide">
+            <button class="modal-close" data-close="anexo-modal" aria-label="Fechar">✕</button>
+            <h2 class="modal-title">📎 Comprovante</h2>
+            <div id="anexo-view" class="anexo-view"></div>
+        </div>
+    </div>
+
+    <div id="confirm-overlay" class="modal-overlay">
+        <div class="confirm-box">
+            <p id="confirm-message" class="confirm-message">Tem certeza?</p>
+            <div class="confirm-actions">
+                <button id="confirm-no" class="btn-secondary">Cancelar</button>
+                <button id="confirm-yes" class="btn-danger">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="auth-gate.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
