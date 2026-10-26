@@ -153,3 +153,7 @@
   .relatorio h3 { break-after: avoid; }
   .relatorio tr { break-inside: avoid; }
 }
+
+/* situação do pagamento */
+.status-badge.pago { background: rgba(46, 204, 113, 0.2); color: #58D68D; }
+.status-badge.reembolsado { background: rgba(52, 152, 219, 0.22); color: #7FC4F5; }

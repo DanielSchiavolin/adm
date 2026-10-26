@@ -7,7 +7,7 @@
 // ============================================================
 
 // Bump together with version.json on every deploy: open apps reload themselves when it changes
-const APP_VERSION = '2026-10-26.1';
+const APP_VERSION = '2026-10-26.2';
 
 const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyB2XpLy5atMeLtc-XuOaAtY9m72mK9dZSY',
@@ -110,6 +110,8 @@ function normalizeConfig(c) {
     funcionarios: toArr(c.funcionarios)
   };
 }
+// situação do pagamento: launches saved before this field count as "pago"
+function sitOf(g) { return g.situacao === 'reembolsado' ? 'reembolsado' : 'pago'; }
 function sumCents(list) { return list.reduce((s, g) => s + cents(g.valor), 0); }
 function readJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
@@ -439,6 +441,7 @@ class AdmApp {
     const ate = document.getElementById('f-ate').value;
     const qth = document.getElementById('f-qth').value || '*';
     const cat = document.getElementById('f-cat').value || '*';
+    const sit = document.getElementById('f-sit').value || '*';
     const q = normalizeText(document.getElementById('f-busca').value);
     return this.gastosCache.filter(g => {
       const d = g.data || '';
@@ -446,8 +449,9 @@ class AdmApp {
       if (per === 'custom' && ((de && d < de) || (ate && d > ate))) return false;
       if (qth !== '*' && (g.qth || SEM_QTH) !== qth) return false;
       if (cat !== '*' && g.categoria !== cat) return false;
+      if (sit !== '*' && sitOf(g) !== sit) return false;
       if (q) {
-        const hay = normalizeText([g.descricao, g.responsavel, g.obs, g.funcionario, g.subtipo, g.qth, this.cat(g.categoria).nome, moneyInput(parseMoney(g.valor))].join(' '));
+        const hay = normalizeText([g.descricao, g.responsavel, g.reembolsoQra, g.obs, g.funcionario, g.subtipo, g.qth, this.cat(g.categoria).nome, moneyInput(parseMoney(g.valor))].join(' '));
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -484,6 +488,9 @@ class AdmApp {
             <span>📅 ${fmtDate(g.data)}</span><span>🏢 ${esc(this.qthName(g.qth))}</span>
             <span class="cat-badge">${esc(c.nome)}</span>${extra.map(e => `<span>${e}</span>`).join('')}
             ${g.responsavel ? `<span>👤 ${esc(g.responsavel)}</span>` : ''}
+            ${sitOf(g) === 'reembolsado'
+              ? `<span class="status-badge reembolsado">💸 Reembolsado${g.reembolsoQra ? ` → ${esc(g.reembolsoQra)}` : ''}</span>`
+              : '<span class="status-badge pago">✅ Pago</span>'}
             ${g.obs ? `<span>💬 ${esc(g.obs)}</span>` : ''}
             ${this.store.isPending(g.id) ? '<span>⏳ aguardando internet</span>' : ''}
           </div>
@@ -515,6 +522,9 @@ class AdmApp {
     document.getElementById('g-perda-status').value = g && g.perdaStatus === 'ressarcido' ? 'ressarcido' : 'pendente';
     document.getElementById('g-valor-ressarc').value = g ? moneyInput(parseMoney(g.valorRessarcido)) : '';
     document.getElementById('g-data-ressarc').value = g ? g.dataRessarcimento || '' : '';
+    this.formSit = g ? sitOf(g) : 'pago';
+    document.getElementById('g-reemb-qra').value = g ? g.reembolsoQra || '' : '';
+    this.renderSit();
     document.getElementById('g-anexo').value = '';
     document.getElementById('g-delete').style.display = g ? '' : 'none';
 
@@ -532,6 +542,11 @@ class AdmApp {
     this.renderAnexoPreview(g && g.temAnexo ? 'saved' : null);
     this.showModal('gasto-modal');
     if (!g) setTimeout(() => document.getElementById('g-valor').focus(), 150);
+  }
+
+  renderSit() {
+    document.querySelectorAll('#g-sit-chips [data-sit]').forEach(b => b.classList.toggle('active', b.dataset.sit === this.formSit));
+    document.getElementById('g-reemb-group').style.display = this.formSit === 'reembolsado' ? '' : 'none';
   }
 
   renderCatChips() {
@@ -584,6 +599,8 @@ class AdmApp {
     if (!(valor > 0)) return this.showToast('Informe o valor', 'error');
     const cat = this.formCat;
     if (cat === 'dobra' && !v('g-funcionario')) return this.showToast('Informe o funcionário que dobrou', 'error');
+    const reemb = this.formSit === 'reembolsado';
+    if (reemb && !v('g-reemb-qra')) return this.showToast('Informe o QRA que recebeu o reembolso', 'error');
     const c = this.cat(cat);
     const g = {
       id, data, valor,
@@ -593,6 +610,8 @@ class AdmApp {
       descricao: v('g-descricao'),
       responsavel: v('g-responsavel'),
       obs: v('g-obs'),
+      situacao: reemb ? 'reembolsado' : 'pago',
+      reembolsoQra: reemb ? v('g-reemb-qra') : null,
       funcionario: cat === 'dobra' ? v('g-funcionario') : null,
       dataDobra: cat === 'dobra' ? v('g-data-dobra') || data : null,
       perdaStatus: cat === 'perdas' ? v('g-perda-status') : null,
@@ -607,7 +626,7 @@ class AdmApp {
     const savedLocally = this.store.write(`adm/gastos/${id}`, g);
     writeJSON('adm_last', { qth: g.qth, categoria: g.categoria, responsavel: g.responsavel });
     // remember new names for the suggestions
-    const novos = [g.responsavel, g.funcionario].filter(n => n && !this.cfg.funcionarios.some(f => normalizeText(f) === normalizeText(n)));
+    const novos = [g.responsavel, g.funcionario, g.reembolsoQra].filter(n => n && !this.cfg.funcionarios.some(f => normalizeText(f) === normalizeText(n)));
     if (novos.length) this.store.write('adm/config', { ...this.cfg, funcionarios: [...this.cfg.funcionarios, ...new Set(novos)] });
     this.hideModal('gasto-modal');
     if (!savedLocally) this.showToast('⚠️ Memória do aparelho cheia: o comprovante pode não ser guardado sem internet.', 'error');
@@ -689,10 +708,10 @@ class AdmApp {
         const rows = list.filter(g => (g.qth || SEM_QTH) === q);
         return `
       <h3>${esc(this.qthName(q))} — ${brl(byQth.get(q) / 100)}</h3>
-      <div class="rel-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Responsável</th><th class="num">Valor</th></tr>
+      <div class="rel-wrap"><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Responsável</th><th>Situação</th><th class="num">Valor</th></tr>
         ${rows.map(g => `<tr><td>${fmtDate(g.data)}</td><td>${esc(this.cat(g.categoria).nome)}${g.subtipo ? ` · ${esc(g.subtipo)}` : ''}</td>
           <td>${esc(g.descricao)}${g.funcionario ? ` (${esc(g.funcionario)}${g.dataDobra ? ', dobra ' + fmtDate(g.dataDobra) : ''})` : ''}${g.obs ? ` — ${esc(g.obs)}` : ''}${g.temAnexo ? ' 📎' : ''}</td>
-          <td>${esc(g.responsavel)}</td><td class="num">${brl(parseMoney(g.valor))}</td></tr>`).join('')}</table></div>`;
+          <td>${esc(g.responsavel)}</td><td>${sitOf(g) === 'reembolsado' ? `Reembolsado${g.reembolsoQra ? ' → ' + esc(g.reembolsoQra) : ''}` : 'Pago'}</td><td class="num">${brl(parseMoney(g.valor))}</td></tr>`).join('')}</table></div>`;
       }).join('');
     }
     html += '<div class="rel-sign"><div>Responsável ADM</div><div>Diretoria</div></div>';
@@ -753,8 +772,8 @@ class AdmApp {
     if (!list.length) return this.showToast('Nada para exportar com esses filtros', 'error');
     const q = s => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
     const num = n => (parseMoney(n) || 0).toFixed(2).replace('.', ',');
-    const head = ['Data', 'QTH', 'Categoria', 'Subtipo', 'Descrição', 'Valor (R$)', 'Responsável', 'Funcionário (3/6)', 'Data da dobra', 'Status perda', 'Valor ressarcido', 'Data ressarcimento', 'Observação', 'Comprovante'];
-    const rows = list.map(g => [fmtDate(g.data), this.qthName(g.qth), this.cat(g.categoria).nome, g.subtipo, g.descricao, num(g.valor), g.responsavel, g.funcionario, fmtDate(g.dataDobra),
+    const head = ['Data', 'QTH', 'Categoria', 'Subtipo', 'Descrição', 'Valor (R$)', 'Responsável', 'Situação', 'QRA reembolsado', 'Funcionário (3/6)', 'Data da dobra', 'Status perda', 'Valor ressarcido', 'Data ressarcimento', 'Observação', 'Comprovante'];
+    const rows = list.map(g => [fmtDate(g.data), this.qthName(g.qth), this.cat(g.categoria).nome, g.subtipo, g.descricao, num(g.valor), g.responsavel, sitOf(g) === 'reembolsado' ? 'Reembolsado' : 'Pago', g.reembolsoQra, g.funcionario, fmtDate(g.dataDobra),
       g.categoria === 'perdas' ? (g.perdaStatus === 'ressarcido' ? 'Ressarcido' : 'Pendente') : '', g.categoria === 'perdas' ? num(g.valorRessarcido) : '', fmtDate(g.dataRessarcimento), g.obs, g.temAnexo ? 'Sim' : 'Não']);
     rows.push(['', '', '', '', 'TOTAL', num(sumCents(list) / 100)]);
     const csv = '﻿' + [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');
@@ -850,7 +869,7 @@ class AdmApp {
 
     // lista
     ['f-busca', 'f-de', 'f-ate'].forEach(id => on(id, 'input', () => this.renderList()));
-    ['f-qth', 'f-cat'].forEach(id => on(id, 'change', () => this.renderList()));
+    ['f-qth', 'f-cat', 'f-sit'].forEach(id => on(id, 'change', () => this.renderList()));
     on('f-periodo', 'change', () => {
       const custom = document.getElementById('f-periodo').value === 'custom';
       ['f-de', 'f-ate'].forEach(id => { document.getElementById(id).style.display = custom ? '' : 'none'; });
@@ -871,6 +890,13 @@ class AdmApp {
 
     // formulário
     on('add-gasto-btn', 'click', () => this.showGastoModal(null));
+    on('g-sit-chips', 'click', e => {
+      const b = e.target.closest('[data-sit]');
+      if (!b) return;
+      this.formSit = b.dataset.sit;
+      this.renderSit();
+      if (this.formSit === 'reembolsado' && !document.getElementById('g-reemb-qra').value) document.getElementById('g-reemb-qra').value = document.getElementById('g-responsavel').value;
+    });
     on('g-cat-chips', 'click', e => {
       const b = e.target.closest('[data-cat]');
       if (!b) return;

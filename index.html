@@ -92,6 +92,11 @@
                 <input type="date" id="f-ate" class="form-input" style="display:none" aria-label="Até">
                 <select id="f-qth" class="form-select"></select>
                 <select id="f-cat" class="form-select"></select>
+                <select id="f-sit" class="form-select">
+                    <option value="*">Todas as situações</option>
+                    <option value="pago">✅ Pago</option>
+                    <option value="reembolsado">💸 Reembolsado</option>
+                </select>
             </div>
             <div id="list-summary" class="list-summary"></div>
             <div id="gastos-list">
@@ -226,6 +231,17 @@
                 <label class="form-label" for="g-responsavel">Responsável</label>
                 <input type="text" id="g-responsavel" class="form-input" list="func-names" autocomplete="off" placeholder="Quem pagou / comprou">
                 <datalist id="func-names"></datalist>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Situação</label>
+                <div id="g-sit-chips" class="chips">
+                    <button type="button" class="chip" data-sit="pago">✅ Pago</button>
+                    <button type="button" class="chip" data-sit="reembolsado">💸 Reembolsado</button>
+                </div>
+            </div>
+            <div class="form-group" id="g-reemb-group">
+                <label class="form-label" for="g-reemb-qra">QRA que recebeu o reembolso</label>
+                <input type="text" id="g-reemb-qra" class="form-input" list="func-names" autocomplete="off" placeholder="Nome">
             </div>
             <div class="form-group">
                 <label class="form-label" for="g-obs">Observação</label>
